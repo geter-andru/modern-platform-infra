@@ -3,8 +3,29 @@
 -- ===========================================
 -- Migration: 20250127000001_create_resources_library_schema.sql
 -- Description: Creates comprehensive database schema for three-tier Resources Library
--- Date: January 27, 2025
+-- Date: September 27, 2025
 -- Status: Production Ready
+
+-- ===========================================
+-- MIGRATION LOGGING SETUP
+-- ===========================================
+
+-- 1) Ensure the logging table exists
+CREATE TABLE IF NOT EXISTS public.migration_log (
+  id bigserial PRIMARY KEY,
+  migration_name text NOT NULL,
+  executed_at timestamptz NOT NULL DEFAULT now(),
+  status text NOT NULL CHECK (status IN ('started','success','failed')),
+  details text
+);
+
+-- Optional but recommended indexes
+CREATE INDEX IF NOT EXISTS migration_log_name_idx ON public.migration_log (migration_name);
+CREATE INDEX IF NOT EXISTS migration_log_executed_at_idx ON public.migration_log (executed_at);
+
+-- 2) Record start of migration
+INSERT INTO public.migration_log (migration_name, executed_at, status)
+VALUES ('20250127000001_create_resources_library_schema', now(), 'started');
 
 -- ===========================================
 -- 1. RESOURCES TABLE
@@ -427,12 +448,9 @@ INSERT INTO resource_templates (template_name, template_type, tier, category, te
 -- MIGRATION COMPLETION
 -- ===========================================
 
--- Log migration completion
-INSERT INTO public.migration_log (migration_name, executed_at, status) 
-VALUES ('20250127000001_create_resources_library_schema', NOW(), 'completed')
-ON CONFLICT (migration_name) DO UPDATE SET 
-  executed_at = NOW(), 
-  status = 'completed';
+-- 3) On success - log migration completion
+INSERT INTO public.migration_log (migration_name, executed_at, status, details)
+VALUES ('20250127000001_create_resources_library_schema', now(), 'success', 'All resources library tables, indexes, policies, and triggers created successfully');
 
 -- ===========================================
 -- SCHEMA VALIDATION

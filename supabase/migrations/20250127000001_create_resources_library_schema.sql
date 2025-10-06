@@ -545,9 +545,12 @@ BEGIN
     RAISE EXCEPTION '❌ Expected at least 8 templates, found %', template_count;
   END IF;
 END $$;
-
+DO $$
+BEGIN
 RAISE NOTICE '🎉 Resources Library database schema migration completed successfully!';
 RAISE NOTICE '📊 Schema includes: 8 tables, 20+ indexes, 15+ RLS policies, 3+ triggers, 8+ templates';
 RAISE NOTICE '🔒 Security: Row Level Security enabled on all tables';
 RAISE NOTICE '⚡ Performance: Comprehensive indexing strategy implemented';
 RAISE NOTICE '🎯 Ready for: Three-tier resource generation and progressive unlocking';
+END;
+$$ LANGUAGE plpgsql;

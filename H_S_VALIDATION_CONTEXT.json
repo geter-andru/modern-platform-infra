@@ -1,0 +1,37 @@
+{
+  "appName": "modern-platform",
+  "appType": "Next.js Application",
+  "architecture": "Monorepo with Frontend/Backend/Infra",
+  "techStack": {
+    "framework": "Next.js 15",
+    "react": "React 19",
+    "typescript": "TypeScript 5.x",
+    "buildSystem": "Next.js Build System",
+    "routing": "App Router",
+    "styling": "Tailwind CSS",
+    "database": "Supabase",
+    "testing": "Jest + React Testing Library"
+  },
+  "integrationPoints": [
+    "Supabase Authentication",
+    "Supabase Database",
+    "Claude AI API",
+    "Airtable Integration",
+    "Netlify Deployment",
+    "Render Backend Deployment"
+  ],
+  "validationRules": {
+    "security": {
+      "nextjsSecrets": true,
+      "supabaseKeys": true,
+      "apiKeys": true
+    },
+    "compatibility": {
+      "nextjs15": true,
+      "react19": true,
+      "appRouter": true,
+      "typescript": true
+    }
+  }
+}
+

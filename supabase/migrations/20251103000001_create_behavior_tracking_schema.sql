@@ -5,6 +5,19 @@
 -- Complements customer_actions (offline) with digital behavior analytics
 
 -- ----------------------------------------------
+-- 0. Helper Functions
+-- ----------------------------------------------
+
+-- Helper function to maintain updated_at timestamps
+CREATE OR REPLACE FUNCTION public.update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ----------------------------------------------
 -- 1. Behavior Events Table
 -- ----------------------------------------------
 CREATE TABLE IF NOT EXISTS behavior_events (
@@ -73,15 +86,15 @@ CREATE TABLE IF NOT EXISTS behavior_events (
 );
 
 -- Indexes for Performance
-CREATE INDEX idx_behavior_events_customer_id ON behavior_events(customer_id);
-CREATE INDEX idx_behavior_events_session_id ON behavior_events(session_id);
-CREATE INDEX idx_behavior_events_event_type ON behavior_events(event_type);
-CREATE INDEX idx_behavior_events_tool_id ON behavior_events(tool_id);
-CREATE INDEX idx_behavior_events_business_impact ON behavior_events(business_impact);
-CREATE INDEX idx_behavior_events_competency_area ON behavior_events(competency_area);
-CREATE INDEX idx_behavior_events_timestamp ON behavior_events(event_timestamp DESC);
-CREATE INDEX idx_behavior_events_growth_stage ON behavior_events(growth_stage);
-CREATE INDEX idx_behavior_events_customer_timestamp ON behavior_events(customer_id, event_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_behavior_events_customer_id ON behavior_events(customer_id);
+CREATE INDEX IF NOT EXISTS idx_behavior_events_session_id ON behavior_events(session_id);
+CREATE INDEX IF NOT EXISTS idx_behavior_events_event_type ON behavior_events(event_type);
+CREATE INDEX IF NOT EXISTS idx_behavior_events_tool_id ON behavior_events(tool_id);
+CREATE INDEX IF NOT EXISTS idx_behavior_events_business_impact ON behavior_events(business_impact);
+CREATE INDEX IF NOT EXISTS idx_behavior_events_competency_area ON behavior_events(competency_area);
+CREATE INDEX IF NOT EXISTS idx_behavior_events_timestamp ON behavior_events(event_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_behavior_events_growth_stage ON behavior_events(growth_stage);
+CREATE INDEX IF NOT EXISTS idx_behavior_events_customer_timestamp ON behavior_events(customer_id, event_timestamp DESC);
 
 -- ----------------------------------------------
 -- 2. Behavior Insights Table (Aggregated Analytics)
@@ -136,9 +149,9 @@ CREATE TABLE IF NOT EXISTS behavior_insights (
 );
 
 -- Indexes
-CREATE INDEX idx_behavior_insights_customer_id ON behavior_insights(customer_id);
-CREATE INDEX idx_behavior_insights_scaling_score ON behavior_insights(current_scaling_score DESC);
-CREATE INDEX idx_behavior_insights_last_activity ON behavior_insights(last_session_timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_behavior_insights_customer_id ON behavior_insights(customer_id);
+CREATE INDEX IF NOT EXISTS idx_behavior_insights_scaling_score ON behavior_insights(current_scaling_score DESC);
+CREATE INDEX IF NOT EXISTS idx_behavior_insights_last_activity ON behavior_insights(last_session_timestamp DESC);
 
 -- ----------------------------------------------
 -- 3. Session Summary Table
@@ -178,23 +191,26 @@ CREATE TABLE IF NOT EXISTS behavior_sessions (
 );
 
 -- Indexes
-CREATE INDEX idx_behavior_sessions_customer_id ON behavior_sessions(customer_id);
-CREATE INDEX idx_behavior_sessions_started_at ON behavior_sessions(started_at DESC);
-CREATE INDEX idx_behavior_sessions_primary_tool ON behavior_sessions(primary_tool);
+CREATE INDEX IF NOT EXISTS idx_behavior_sessions_customer_id ON behavior_sessions(customer_id);
+CREATE INDEX IF NOT EXISTS idx_behavior_sessions_started_at ON behavior_sessions(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_behavior_sessions_primary_tool ON behavior_sessions(primary_tool);
 
 -- ----------------------------------------------
 -- 4. Update Triggers
 -- ----------------------------------------------
 
 -- Auto-update updated_at timestamps
+DROP TRIGGER IF EXISTS update_behavior_events_updated_at ON behavior_events;
 CREATE TRIGGER update_behavior_events_updated_at
   BEFORE UPDATE ON behavior_events
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_behavior_insights_updated_at ON behavior_insights;
 CREATE TRIGGER update_behavior_insights_updated_at
   BEFORE UPDATE ON behavior_insights
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_behavior_sessions_updated_at ON behavior_sessions;
 CREATE TRIGGER update_behavior_sessions_updated_at
   BEFORE UPDATE ON behavior_sessions
   FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
@@ -209,6 +225,7 @@ ALTER TABLE behavior_insights ENABLE ROW LEVEL SECURITY;
 ALTER TABLE behavior_sessions ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies: Users can only access their own data
+DROP POLICY IF EXISTS behavior_events_policy ON behavior_events;
 CREATE POLICY behavior_events_policy ON behavior_events
   FOR ALL USING (
     customer_id = auth.jwt() ->> 'sub' OR
@@ -218,6 +235,7 @@ CREATE POLICY behavior_events_policy ON behavior_events
     )
   );
 
+DROP POLICY IF EXISTS behavior_insights_policy ON behavior_insights;
 CREATE POLICY behavior_insights_policy ON behavior_insights
   FOR ALL USING (
     customer_id = auth.jwt() ->> 'sub' OR
@@ -227,6 +245,7 @@ CREATE POLICY behavior_insights_policy ON behavior_insights
     )
   );
 
+DROP POLICY IF EXISTS behavior_sessions_policy ON behavior_sessions;
 CREATE POLICY behavior_sessions_policy ON behavior_sessions
   FOR ALL USING (
     customer_id = auth.jwt() ->> 'sub' OR
@@ -289,6 +308,7 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to auto-update insights
+DROP TRIGGER IF EXISTS trigger_update_insights_on_event ON behavior_events;
 CREATE TRIGGER trigger_update_insights_on_event
   AFTER INSERT ON behavior_events
   FOR EACH ROW EXECUTE FUNCTION update_behavior_insights_on_event();
@@ -329,6 +349,29 @@ INSERT INTO behavior_insights (
     "Generate systematic business case for executive review"
   ]'::jsonb
 ) ON CONFLICT (customer_id) DO NOTHING;
+
+-- ----------------------------------------------
+-- 9. Backfill Logic for Existing Data
+-- ----------------------------------------------
+
+-- Update behavior_insights from any existing behavior_events
+-- This ensures existing customers get initialized with correct baseline data
+UPDATE public.behavior_insights bi
+SET
+  last_session_timestamp = sub.last_event_ts,
+  days_since_last_activity = CASE
+    WHEN sub.last_event_ts IS NOT NULL
+    THEN GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - sub.last_event_ts)) / 86400)::int)
+    ELSE NULL
+  END
+FROM (
+  SELECT
+    customer_id,
+    MAX(event_timestamp) AS last_event_ts
+  FROM public.behavior_events
+  GROUP BY customer_id
+) sub
+WHERE bi.customer_id = sub.customer_id;
 
 COMMENT ON TABLE behavior_events IS 'Tracks all digital platform interactions for systematic scaling intelligence';
 COMMENT ON TABLE behavior_insights IS 'Aggregated analytics and insights derived from behavior events';

@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Welcome to Andru - Founding Member Access</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      background-color: #0a0a0a;
+      color: #ffffff;
+    }
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 40px 20px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .logo {
+      display: inline-block;
+      padding: 16px 32px;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: #ffffff;
+      margin-bottom: 24px;
+    }
+    .badge {
+      display: inline-block;
+      padding: 8px 20px;
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      border-radius: 24px;
+      font-size: 14px;
+      font-weight: 600;
+      color: #3b82f6;
+      letter-spacing: 0.5px;
+    }
+    .content {
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 24px;
+      padding: 40px;
+      margin-bottom: 32px;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 700;
+      line-height: 1.2;
+      margin: 0 0 16px 0;
+      color: #ffffff;
+    }
+    p {
+      font-size: 16px;
+      line-height: 1.6;
+      margin: 0 0 24px 0;
+      color: rgba(255, 255, 255, 0.8);
+    }
+    .cta-button {
+      display: inline-block;
+      padding: 16px 32px;
+      background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+      border-radius: 16px;
+      color: #ffffff;
+      font-size: 16px;
+      font-weight: 600;
+      text-decoration: none;
+      text-align: center;
+      margin: 8px 0 24px 0;
+      box-shadow: 0 8px 24px rgba(59, 130, 246, 0.3);
+    }
+    .info-box {
+      background: rgba(59, 130, 246, 0.05);
+      border: 1px solid rgba(59, 130, 246, 0.2);
+      border-radius: 16px;
+      padding: 24px;
+      margin: 24px 0;
+    }
+    .info-box h3 {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 0 0 12px 0;
+      color: #3b82f6;
+    }
+    .info-box ul {
+      margin: 0;
+      padding-left: 20px;
+      color: rgba(255, 255, 255, 0.8);
+    }
+    .info-box li {
+      margin-bottom: 8px;
+      line-height: 1.5;
+    }
+    .footer {
+      text-align: center;
+      padding: 32px 0;
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.5);
+    }
+    .footer a {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">Andru Revenue Intelligence</div>
+      <div class="badge">🎉 FOUNDING MEMBER #{{ .UserMetaData.founding_member_number }}</div>
+    </div>
+
+    <div class="content">
+      <h1>Welcome to the Founding Member Waitlist! 🚀</h1>
+
+      <p>Congratulations! Your payment has been successfully processed, and you're officially secured as one of our 100 founding members.</p>
+
+      <a href="{{ .ConfirmationURL }}" class="cta-button">Access Your Founding Member Portal →</a>
+
+      <div class="info-box">
+        <h3>What Happens Next:</h3>
+        <ul>
+          <li><strong>December 1, 2025:</strong> Platform access unlocked for all founding members</li>
+          <li><strong>Early Access Period:</strong> $497/month during development (ongoing access to new features)</li>
+          <li><strong>Forever Lock:</strong> $750/month when full platform launches (vs. $1,250 standard)</li>
+          <li><strong>Lifetime Savings:</strong> $6,000/year forever compared to standard pricing</li>
+        </ul>
+      </div>
+
+      <div class="info-box">
+        <h3>Your Founding Member Benefits:</h3>
+        <ul>
+          <li>Early access to all platform features as they're built</li>
+          <li>Direct influence on product roadmap and feature priorities</li>
+          <li>Exclusive Slack community with other founding members</li>
+          <li>Priority support and dedicated success resources</li>
+          <li>Locked-in pricing forever ($750 vs. $1,250 standard)</li>
+        </ul>
+      </div>
+
+      <p style="margin-top: 32px;">This magic link is valid for 1 hour. Click the button above to access your founding member portal and complete your profile.</p>
+
+      <p style="font-size: 14px; color: rgba(255, 255, 255, 0.6); margin-bottom: 0;">
+        <strong>Alternative Login:</strong> You can also sign in using Google OAuth at any time.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p>
+        Questions? Reply to this email or reach out at
+        <a href="mailto:support@andru.io">support@andru.io</a>
+      </p>
+      <p style="margin-top: 16px;">
+        &copy; 2025 Andru Revenue Intelligence. All rights reserved.
+      </p>
+    </div>
+  </div>
+</body>
+</html>

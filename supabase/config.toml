@@ -120,9 +120,16 @@ file_size_limit = "50MiB"
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+# PRODUCTION: Update this to your production domain (e.g., "https://app.andru.io")
+site_url = "env(SUPABASE_SITE_URL)"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+# PRODUCTION: Add production URLs here
+additional_redirect_urls = [
+  "http://127.0.0.1:3000",
+  "http://localhost:3000",
+  "env(SUPABASE_ADDITIONAL_REDIRECT_URL_1)",
+  "env(SUPABASE_ADDITIONAL_REDIRECT_URL_2)"
+]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # Path to JWT signing key. DO NOT commit your signing keys file to git.
@@ -193,10 +200,14 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
+# Custom email templates for founding member onboarding
+[auth.email.template.magic_link]
+subject = "Welcome to Andru - Your Founding Member Access Link 🚀"
+content_path = "./supabase/templates/magic_link.html"
+
 # [auth.email.template.invite]
 # subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# content_path = "./templates/invite.html"
 
 [auth.sms]
 # Allow/disallow new user signups via SMS to your project.
@@ -263,6 +274,18 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `slack`, `spotify`, `workos`, `zoom`.
+
+# Google OAuth Configuration for Founding Member Login
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+# DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+# Overrides the default auth redirectUrl.
+redirect_uri = ""
+# If enabled, the nonce check will be skipped. Required for local sign in with Google auth.
+skip_nonce_check = true
+
 [auth.external.apple]
 enabled = false
 client_id = ""

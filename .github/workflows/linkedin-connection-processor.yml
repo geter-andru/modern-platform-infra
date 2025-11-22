@@ -1,0 +1,172 @@
+name: LinkedIn Connection Processor
+
+on:
+  # Run daily at 9 AM PST (5 PM UTC)
+  schedule:
+    - cron: '0 17 * * *'
+
+  # Allow manual trigger with optional single profile URL
+  workflow_dispatch:
+    inputs:
+      profile_url:
+        description: 'Optional: Single LinkedIn profile URL to process'
+        required: false
+        type: string
+      dry_run:
+        description: 'Dry run (research only, no commits)'
+        required: false
+        default: 'false'
+        type: boolean
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  process-connections:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout infra repository
+        uses: actions/checkout@v4
+
+      - name: Checkout frontend repository
+        uses: actions/checkout@v4
+        with:
+          repository: geter-andru/modern-platform-frontend
+          path: frontend-repo
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'scripts/linkedin-processor/package.json'
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Install dependencies
+        working-directory: scripts/linkedin-processor
+        run: npm install
+
+      - name: Create output directories
+        run: mkdir -p linkedin-outreach/drafts
+
+      - name: Run LinkedIn Connection Processor
+        working-directory: scripts/linkedin-processor
+        env:
+          LINKEDIN_SESSION_COOKIE: ${{ secrets.LINKEDIN_SESSION_COOKIE }}
+          LUSHA_API_KEY: ${{ secrets.LUSHA_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FRONTEND_SCENARIOS_PATH: ${{ github.workspace }}/frontend-repo/data/scenarios.json
+          OUTPUT_ROOT: ${{ github.workspace }}
+          PROFILE_URL: ${{ github.event.inputs.profile_url }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: node index.js
+
+      - name: Check for new scenarios
+        id: check_scenarios
+        run: |
+          cd frontend-repo
+          if git diff --quiet data/scenarios.json; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+            echo "companies=$(git diff data/scenarios.json | grep '+.*\"company\":' | sed 's/.*: \"\(.*\)\".*/\1/' | tr '\n' ', ')" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit scenarios to frontend repo
+        if: steps.check_scenarios.outputs.has_changes == 'true' && github.event.inputs.dry_run != 'true'
+        run: |
+          cd frontend-repo
+          git config --local user.email "action@github.com"
+          git config --local user.name "LinkedIn Processor Bot"
+          git add data/scenarios.json
+          git commit -m "Add ICP scenarios for new LinkedIn connections
+
+          Companies: ${{ steps.check_scenarios.outputs.companies }}
+
+          🤖 Generated with LinkedIn Connection Processor"
+          git push
+
+      - name: Check for InMail drafts
+        id: check_drafts
+        run: |
+          if [ -d "linkedin-outreach/drafts" ] && [ "$(ls -A linkedin-outreach/drafts 2>/dev/null)" ]; then
+            echo "has_drafts=true" >> $GITHUB_OUTPUT
+            echo "count=$(ls linkedin-outreach/drafts/*.md 2>/dev/null | wc -l)" >> $GITHUB_OUTPUT
+          else
+            echo "has_drafts=false" >> $GITHUB_OUTPUT
+            echo "count=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit InMail drafts
+        if: steps.check_drafts.outputs.has_drafts == 'true'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "LinkedIn Processor Bot"
+          git add linkedin-outreach/
+          git add scripts/linkedin-processor/processed-connections.json || true
+          git diff --staged --quiet || git commit -m "📧 LinkedIn outreach drafts for $(date +%Y-%m-%d)
+
+          Generated ${{ steps.check_drafts.outputs.count }} InMail drafts.
+
+          🤖 Generated with LinkedIn Connection Processor"
+          git push
+
+      - name: Create review issue
+        if: steps.check_drafts.outputs.has_drafts == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const date = new Date().toISOString().split('T')[0];
+            const count = '${{ steps.check_drafts.outputs.count }}';
+            const companies = '${{ steps.check_scenarios.outputs.companies }}';
+
+            // Read draft summaries
+            let draftSummary = '';
+            try {
+              const draftsDir = 'linkedin-outreach/drafts';
+              const files = fs.readdirSync(draftsDir).filter(f => f.endsWith('.md'));
+              for (const file of files.slice(0, 5)) {
+                const content = fs.readFileSync(`${draftsDir}/${file}`, 'utf8');
+                const nameMatch = content.match(/\*\*Name:\*\* (.+)/);
+                const companyMatch = content.match(/\*\*Company:\*\* (.+)/);
+                const slugMatch = content.match(/\*\*ICP Page:\*\* .+\/icp\/(.+)/);
+                if (nameMatch && companyMatch) {
+                  const slug = slugMatch ? slugMatch[1] : companyMatch[1].toLowerCase().replace(/\s+/g, '-');
+                  draftSummary += `- **${nameMatch[1]}** (${companyMatch[1]}) → [View ICP](https://platform.andru-ai.com/icp/${slug})\n`;
+                }
+              }
+            } catch (e) {
+              draftSummary = 'See drafts folder for details.';
+            }
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🔗 New LinkedIn Connections Processed - ${date}`,
+              body: `## New Connections Ready for Outreach
+
+            Processed **${count}** new LinkedIn connection(s).
+
+            ### Connections & ICP Pages
+            ${draftSummary}
+
+            ### Files
+            - **InMail Drafts:** \`linkedin-outreach/drafts/\`
+            - **Scenarios Added:** ${companies || 'See frontend repo'}
+
+            ### Action Items
+            - [ ] Review each InMail draft
+            - [ ] Personalize messages as needed
+            - [ ] Send via LinkedIn
+            - [ ] Mark as sent in draft files
+
+            ---
+            🤖 Generated by LinkedIn Connection Processor`,
+              labels: ['linkedin', 'outreach']
+            });

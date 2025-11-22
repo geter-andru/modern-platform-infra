@@ -1,0 +1,14 @@
+{
+  "name": "content-opportunity-finder",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Find unanswered questions on Quora, Reddit, and LinkedIn for content engagement",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "playwright": "^1.48.0"
+  }
+}

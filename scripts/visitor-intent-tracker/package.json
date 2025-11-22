@@ -1,0 +1,14 @@
+{
+  "name": "visitor-intent-tracker",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Track high-intent website visitors and generate re-engagement suggestions",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

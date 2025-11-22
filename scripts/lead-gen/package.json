@@ -1,0 +1,24 @@
+{
+  "name": "andru-lead-gen-agent",
+  "version": "1.0.0",
+  "description": "Automated lead generation agent for Andru - scrapes compelling events and generates platform-specific posts",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dry-run": "node index.js --dry-run",
+    "linkedin": "node index.js --platform=linkedin",
+    "twitter": "node index.js --platform=twitter",
+    "reddit": "node index.js --platform=reddit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.24.0",
+    "playwright": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "Brandon Geter",
+  "license": "UNLICENSED",
+  "private": true
+}

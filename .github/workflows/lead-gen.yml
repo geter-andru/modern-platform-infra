@@ -14,6 +14,10 @@ on:
         default: 'false'
         type: boolean
 
+permissions:
+  contents: write
+  issues: write
+
 jobs:
   generate-posts:
     runs-on: ubuntu-latest

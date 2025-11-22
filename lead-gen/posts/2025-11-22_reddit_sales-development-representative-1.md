@@ -2,41 +2,42 @@
 
 ## Source Event
 - **Title:** Sales Development Representative 1
-- **URL:** https://www.linkedin.com/jobs/view/sales-development-representative-1-at-linkedin-4338470612?position=1&pageNum=0&refId=cu8XtZn7F7jOFpV3NGnUxQ%3D%3D&trackingId=%2FdBi8SoZWL7MUnlYAn2rmw%3D%3D
+- **URL:** https://www.linkedin.com/jobs/view/sales-development-representative-1-at-linkedin-4338470612?position=1&pageNum=0&refId=C9HcKOugOyJ5%2F%2FLiJ4SJdA%3D%3D&trackingId=rz%2BpGzwVA7iM2mbj9s2nVw%3D%3D
 - **Source:** linkedin_jobs
-- **Generated:** 2025-11-22T08:14:54.046Z
+- **Generated:** 2025-11-22T17:14:19.969Z
 
 ---
 
 ## Post Content
 
-**Title:** Why your first 10 customers are probably misleading you (and how to fix it)
+**Title:** Why hiring your first SDR might be the worst mistake you'll make (learned this the hard way)
 
-Just wrapped a brutal quarter where we finally hit our ARR target, but it took way longer than it should have. Got me reflecting on a pattern I've seen across 7 different SaaS companies over 9 years in sales.
+**Body:**
 
-**The problem:** Most of us reverse-engineer our ICP from our first wins. But those early customers often bought for the wrong reasons - existing relationships, lucky timing, heavy discounts, or because they're just early adopters who buy anything shiny.
+Just saw LinkedIn posting another SDR role and it reminded me of a painful lesson from my SaaS days.
 
-I call this "contaminated data." You're optimizing your entire go-to-market around accidents masquerading as strategy.
+Most founders hire their first sales hire when they hit some arbitrary revenue milestone or feel "too busy" to do outreach. I've watched this play out at 7+ companies, and it almost always backfires.
 
-**Here's what I learned the hard way:**
+Here's what I learned after 9 years in SaaS sales and training 20+ sellers:
 
-Your first customers fall into two buckets:
-- **Grocery store wins** - they had alternatives, you got lucky
-- **Sahara wins** - you solved something they literally couldn't solve elsewhere
+**The problem isn't capacity, it's clarity.**
 
-The Sahara customers become evangelists. They sell for you in demos, give killer case studies, refer others. The grocery store customers? Transactional. They'll churn when something better/cheaper comes along.
+When founders can't articulate why their best customers actually bought (beyond generic "we save time/money"), how can they expect an SDR to? I call this "contaminated data" - you're reverse-engineering from relationship wins, lucky timing, or discount purchases instead of understanding the pure signal of structural need.
 
-**My framework now:**
-1. Look at your happiest, most vocal customers
-2. Ignore HOW they found you, focus on WHY they desperately needed you
-3. Find 10 more companies with that exact same structural problem
-4. Test if your messaging hits different there
+Your SDR ends up spraying generic messages into the void because they're optimizing for noise, not signal.
 
-**Question for the community:** How do you separate signal from noise in your early customer data? Have you caught yourself building around the wrong customer archetype?
+**The fix:** Before you hire anyone, answer this honestly:
+- Can you identify prospects who are in active pain without your solution?
+- Do you know the specific business outcomes that make buying urgent vs. optional?
+- Can you translate your features into ROI that finance actually cares about?
 
-I'm especially curious how other technical founders handle this - translating features into business outcomes is hard enough without optimizing for the wrong people.
+If you're still figuring this out yourself, an SDR will just amplify the confusion at 10x the cost.
 
-What patterns have you noticed in your most successful vs. most forgettable customers?
+I've seen technical founders burn through 3-4 sales hires before realizing the issue wasn't the people - it was the lack of a repeatable framework for identifying where they're essential, not just another nice-to-have tool.
+
+**Question for the community:** How did you know you were ready for your first sales hire? What frameworks helped you get clarity before scaling outbound?
+
+Curious if others have made this mistake or found better approaches.
 
 ---
 

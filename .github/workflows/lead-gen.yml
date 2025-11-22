@@ -22,13 +22,6 @@ jobs:
       - name: Checkout infra repository
         uses: actions/checkout@v4
 
-      - name: Checkout main platform (for content)
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ github.repository_owner }}/modern-platform
-          path: modern-platform-content
-          token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -50,7 +43,7 @@ jobs:
         working-directory: scripts/lead-gen
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CONTENT_ROOT: ${{ github.workspace }}/modern-platform-content
+          CONTENT_ROOT: ${{ github.workspace }}/content
           OUTPUT_ROOT: ${{ github.workspace }}
         run: |
           if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then

@@ -15,10 +15,10 @@ const __dirname = path.dirname(new URL(import.meta.url).pathname);
 const INFRA_ROOT = path.resolve(__dirname, '../..');
 
 // Content paths - can be overridden via environment variables
-// Default assumes modern-platform repo is cloned as sibling directory
-const CONTENT_ROOT = process.env.CONTENT_ROOT || path.resolve(INFRA_ROOT, '../');
-const STRATEGY_PATH = process.env.STRATEGY_PATH || path.join(CONTENT_ROOT, 'dev/analytics/lead-gen/COMPELLING_EVENT_POSTING_STRATEGY.md');
-const PHILOSOPHY_PATH = process.env.PHILOSOPHY_PATH || path.join(CONTENT_ROOT, 'docs/philosophy');
+// Default assumes content is in infra/content/ directory
+const CONTENT_ROOT = process.env.CONTENT_ROOT || path.join(INFRA_ROOT, 'content');
+const STRATEGY_PATH = process.env.STRATEGY_PATH || path.join(CONTENT_ROOT, 'COMPELLING_EVENT_POSTING_STRATEGY.md');
+const PHILOSOPHY_PATH = process.env.PHILOSOPHY_PATH || CONTENT_ROOT;
 const OUTPUT_ROOT = process.env.OUTPUT_ROOT || INFRA_ROOT;
 
 /**

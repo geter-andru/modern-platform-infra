@@ -1,0 +1,14 @@
+{
+  "name": "pattern-analyzer",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Weekly pattern analysis of complaints to identify recurring pain points",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.32.1",
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}

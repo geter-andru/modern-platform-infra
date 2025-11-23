@@ -1,0 +1,11 @@
+{
+  "name": "email-notifier",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Send workflow results via Resend API",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {}
+}

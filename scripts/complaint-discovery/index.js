@@ -1,6 +1,6 @@
 /**
  * Complaint Discovery Agent
- * Uses Reddit's official API to find user complaints and pain points
+ * Uses Hacker News API to find user complaints and pain points
  * Stores in Supabase for pattern analysis
  */
 
@@ -12,11 +12,6 @@ const anthropic = new Anthropic();
 // Configuration
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
-const SUBREDDITS = (process.env.SUBREDDITS || 'Entrepreneur,SaaS,startups,sales').split(',').map(s => s.trim());
-
-// Reddit API credentials (use app-only auth)
-const REDDIT_CLIENT_ID = process.env.REDDIT_CLIENT_ID;
-const REDDIT_CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET;
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('❌ SUPABASE_URL and SUPABASE_SERVICE_KEY are required');
@@ -31,106 +26,41 @@ const COMPLAINT_KEYWORDS = [
   'nightmare', 'terrible', 'awful', 'broken', 'useless', 'annoying',
   'anyone else', 'help me', 'advice needed', 'what am i doing wrong',
   'months building', 'no customers', 'no sales', 'can\'t figure out',
-  'stuck on', 'burned out', 'giving up', 'should i pivot'
+  'stuck on', 'burned out', 'giving up', 'should i pivot',
+  'hard to find', 'impossible to', 'wasted time', 'mistake'
 ];
 
-// Search terms for ICP-relevant complaints
+// Search terms for ICP-relevant content
 const SEARCH_TERMS = [
   'first sales hire',
-  'no customers startup',
-  'validate idea',
-  'founder led sales',
-  'B2B sales struggle',
-  'ICP ideal customer',
+  'startup sales',
+  'founder sales',
+  'B2B sales',
+  'no customers',
+  'finding customers',
   'product market fit',
-  'startup sales process'
+  'ICP ideal customer',
+  'validate startup',
+  'sales process'
 ];
 
-let redditAccessToken = null;
-
-/**
- * Get Reddit access token using app-only (client credentials) flow
- */
-async function getRedditToken() {
-  if (!REDDIT_CLIENT_ID || !REDDIT_CLIENT_SECRET) {
-    console.log('⚠️  Reddit API credentials not provided, using public JSON endpoints');
-    return null;
-  }
-
-  try {
-    const auth = Buffer.from(`${REDDIT_CLIENT_ID}:${REDDIT_CLIENT_SECRET}`).toString('base64');
-
-    const response = await fetch('https://www.reddit.com/api/v1/access_token', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${auth}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'User-Agent': 'ComplaintDiscovery/1.0'
-      },
-      body: 'grant_type=client_credentials'
-    });
-
-    if (!response.ok) {
-      console.log('⚠️  Reddit OAuth failed, using public endpoints');
-      return null;
-    }
-
-    const data = await response.json();
-    console.log('✅ Reddit API authenticated');
-    return data.access_token;
-  } catch (error) {
-    console.log('⚠️  Reddit auth error:', error.message);
-    return null;
-  }
-}
-
-/**
- * Fetch from Reddit API or public JSON endpoint
- */
-async function redditFetch(url) {
-  const headers = {
-    'User-Agent': 'ComplaintDiscovery/1.0 (by /u/andru_platform)'
-  };
-
-  if (redditAccessToken) {
-    // Use OAuth API
-    const apiUrl = url.replace('https://www.reddit.com', 'https://oauth.reddit.com');
-    headers['Authorization'] = `Bearer ${redditAccessToken}`;
-
-    const response = await fetch(apiUrl, { headers });
-    if (response.ok) {
-      return response.json();
-    }
-  }
-
-  // Fallback to public JSON endpoint
-  const jsonUrl = url.endsWith('.json') ? url : `${url}.json`;
-  const response = await fetch(jsonUrl, { headers });
-
-  if (!response.ok) {
-    throw new Error(`Reddit API error: ${response.status}`);
-  }
-
-  return response.json();
-}
+// HN Algolia API base
+const HN_API = 'https://hn.algolia.com/api/v1';
 
 /**
  * Main execution
  */
 async function main() {
   console.log('🔍 Complaint Discovery Agent Starting...\n');
-  console.log(`Subreddits: ${SUBREDDITS.join(', ')}\n`);
-
-  // Get Reddit token if credentials provided
-  redditAccessToken = await getRedditToken();
+  console.log('Platform: Hacker News\n');
 
   // Create scrape run record
   const { data: scrapeRun } = await supabase
     .from('complaint_scrape_runs')
     .insert({
-      platform: 'reddit',
+      platform: 'hacker_news',
       search_terms: SEARCH_TERMS,
-      subreddits_scraped: SUBREDDITS,
+      subreddits_scraped: ['Hacker News'],
       status: 'running'
     })
     .select()
@@ -139,8 +69,8 @@ async function main() {
   const runId = scrapeRun?.id;
 
   try {
-    // Scrape Reddit using API
-    const posts = await scrapeReddit();
+    // Fetch from Hacker News
+    const posts = await scrapeHackerNews();
     console.log(`\n📋 Found ${posts.length} potential complaint posts\n`);
 
     // Analyze each post with Claude
@@ -156,7 +86,7 @@ async function main() {
         });
       }
 
-      // Rate limiting
+      // Rate limiting for Claude API
       await sleep(500);
     }
 
@@ -170,8 +100,8 @@ async function main() {
       const { error } = await supabase
         .from('complaints')
         .upsert({
-          platform: 'reddit',
-          subreddit: complaint.subreddit,
+          platform: 'hacker_news',
+          subreddit: 'Hacker News',
           post_url: complaint.url,
           post_id: complaint.postId,
           author: complaint.author,
@@ -206,7 +136,7 @@ async function main() {
       })
       .eq('id', runId);
 
-    // Set environment variables for GitHub Action
+    // Summary
     console.log(`\n📊 Summary:`);
     console.log(`  Posts scraped: ${posts.length}`);
     console.log(`  Complaints identified: ${complaints.length}`);
@@ -226,7 +156,6 @@ async function main() {
   } catch (error) {
     console.error('Fatal error:', error);
 
-    // Update scrape run with error
     if (runId) {
       await supabase
         .from('complaint_scrape_runs')
@@ -243,82 +172,105 @@ async function main() {
 }
 
 /**
- * Scrape Reddit for complaints using API
+ * Scrape Hacker News for complaints using Algolia API
  */
-async function scrapeReddit() {
-  console.log('🔴 Scraping Reddit via API...');
+async function scrapeHackerNews() {
+  console.log('🟠 Fetching from Hacker News API...');
 
   const posts = [];
+  const oneWeekAgo = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
 
-  try {
-    for (const subreddit of SUBREDDITS) {
-      console.log(`  Scraping r/${subreddit}...`);
+  // Search for relevant posts
+  for (const term of SEARCH_TERMS) {
+    try {
+      console.log(`  Searching: "${term}"...`);
 
-      // Search within subreddit for complaint-related posts
-      for (const term of SEARCH_TERMS.slice(0, 4)) {
-        try {
-          const searchUrl = `https://www.reddit.com/r/${subreddit}/search.json?q=${encodeURIComponent(term)}&restrict_sr=on&sort=new&t=month&limit=15`;
+      // Search stories
+      const storyUrl = `${HN_API}/search?query=${encodeURIComponent(term)}&tags=story&numericFilters=created_at_i>${oneWeekAgo}&hitsPerPage=20`;
+      const storyResponse = await fetch(storyUrl);
+      const storyData = await storyResponse.json();
 
-          const data = await redditFetch(searchUrl);
+      if (storyData.hits) {
+        for (const hit of storyData.hits) {
+          const text = `${hit.title || ''} ${hit.story_text || ''}`.toLowerCase();
 
-          if (data?.data?.children) {
-            for (const child of data.data.children) {
-              const post = child.data;
-              posts.push({
-                subreddit: `r/${subreddit}`,
-                postId: post.name,
-                title: post.title || '',
-                url: `https://www.reddit.com${post.permalink}`,
-                author: post.author || '[deleted]',
-                upvotes: post.ups || 0,
-                comments: post.num_comments || 0,
-                content: (post.selftext || '').slice(0, 2000)
-              });
-            }
+          // Check for complaint indicators or just add if it's a relevant "Ask HN"
+          const hasComplaint = COMPLAINT_KEYWORDS.some(kw => text.includes(kw));
+          const isAskHN = hit.title?.toLowerCase().startsWith('ask hn');
+
+          if (hasComplaint || isAskHN) {
+            posts.push({
+              postId: `hn_${hit.objectID}`,
+              title: hit.title || '',
+              url: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+              author: hit.author || '[unknown]',
+              upvotes: hit.points || 0,
+              comments: hit.num_comments || 0,
+              content: hit.story_text || ''
+            });
           }
-
-          await sleep(1000); // Rate limit between requests
-        } catch (e) {
-          console.log(`    Warning: Could not search "${term}" in r/${subreddit}: ${e.message}`);
         }
       }
 
-      // Also check "new" posts
-      try {
-        const newUrl = `https://www.reddit.com/r/${subreddit}/new.json?limit=25`;
-        const data = await redditFetch(newUrl);
+      // Also search comments for pain points
+      const commentUrl = `${HN_API}/search?query=${encodeURIComponent(term)}&tags=comment&numericFilters=created_at_i>${oneWeekAgo}&hitsPerPage=15`;
+      const commentResponse = await fetch(commentUrl);
+      const commentData = await commentResponse.json();
 
-        if (data?.data?.children) {
-          for (const child of data.data.children) {
-            const post = child.data;
-            const text = `${post.title} ${post.selftext}`.toLowerCase();
+      if (commentData.hits) {
+        for (const hit of commentData.hits) {
+          const text = (hit.comment_text || '').toLowerCase();
 
-            // Filter for complaint indicators
-            const hasComplaintKeyword = COMPLAINT_KEYWORDS.some(kw => text.includes(kw));
-
-            if (hasComplaintKeyword) {
-              posts.push({
-                subreddit: `r/${subreddit}`,
-                postId: post.name,
-                title: post.title || '',
-                url: `https://www.reddit.com${post.permalink}`,
-                author: post.author || '[deleted]',
-                upvotes: post.ups || 0,
-                comments: post.num_comments || 0,
-                content: (post.selftext || '').slice(0, 2000)
-              });
-            }
+          if (COMPLAINT_KEYWORDS.some(kw => text.includes(kw)) && text.length > 100) {
+            posts.push({
+              postId: `hn_comment_${hit.objectID}`,
+              title: `Comment on: ${hit.story_title || 'HN Discussion'}`,
+              url: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+              author: hit.author || '[unknown]',
+              upvotes: hit.points || 0,
+              comments: 0,
+              content: stripHtml(hit.comment_text || '').slice(0, 2000)
+            });
           }
         }
+      }
 
-        await sleep(1000);
-      } catch (e) {
-        console.log(`    Warning: Could not scrape new posts in r/${subreddit}: ${e.message}`);
+      await sleep(200); // Be nice to the API
+    } catch (e) {
+      console.log(`    Warning: Search failed for "${term}": ${e.message}`);
+    }
+  }
+
+  // Also get recent "Ask HN" posts (often contain pain points)
+  try {
+    console.log('  Fetching recent Ask HN posts...');
+    const askUrl = `${HN_API}/search?tags=ask_hn&numericFilters=created_at_i>${oneWeekAgo}&hitsPerPage=30`;
+    const askResponse = await fetch(askUrl);
+    const askData = await askResponse.json();
+
+    if (askData.hits) {
+      for (const hit of askData.hits) {
+        const text = `${hit.title || ''} ${hit.story_text || ''}`.toLowerCase();
+
+        // Filter for startup/business related Ask HNs
+        const businessKeywords = ['startup', 'saas', 'b2b', 'sales', 'customer', 'founder', 'business', 'product', 'market', 'revenue'];
+        const isRelevant = businessKeywords.some(kw => text.includes(kw));
+
+        if (isRelevant) {
+          posts.push({
+            postId: `hn_${hit.objectID}`,
+            title: hit.title || '',
+            url: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+            author: hit.author || '[unknown]',
+            upvotes: hit.points || 0,
+            comments: hit.num_comments || 0,
+            content: stripHtml(hit.story_text || '').slice(0, 2000)
+          });
+        }
       }
     }
-
-  } catch (error) {
-    console.error('Error scraping Reddit:', error.message);
+  } catch (e) {
+    console.log(`    Warning: Ask HN fetch failed: ${e.message}`);
   }
 
   // Deduplicate by URL
@@ -329,13 +281,28 @@ async function scrapeReddit() {
 }
 
 /**
+ * Strip HTML tags from text
+ */
+function stripHtml(html) {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
  * Analyze a post with Claude
  */
 async function analyzePost(post) {
-  const prompt = `Analyze this Reddit post to determine if it expresses a genuine complaint or pain point relevant to B2B SaaS founders.
+  const prompt = `Analyze this Hacker News post/comment to determine if it expresses a genuine complaint or pain point relevant to B2B SaaS founders.
 
 ## POST
-Subreddit: ${post.subreddit}
 Title: ${post.title}
 Content: ${post.content || '(no body text)'}
 Upvotes: ${post.upvotes}

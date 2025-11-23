@@ -2,14 +2,13 @@
   "name": "complaint-discovery",
   "version": "1.0.0",
   "type": "module",
-  "description": "Automated complaint discovery from Reddit, Quora, and other platforms",
+  "description": "Automated complaint discovery from Reddit using official API",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.32.1",
-    "@supabase/supabase-js": "^2.45.0",
-    "playwright": "^1.48.0"
+    "@supabase/supabase-js": "^2.45.0"
   }
 }

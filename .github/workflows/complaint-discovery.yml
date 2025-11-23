@@ -33,9 +33,6 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'scripts/complaint-discovery/package.json'
 
-      - name: Install Playwright browsers
-        run: npx playwright install chromium --with-deps
-
       - name: Install dependencies
         working-directory: scripts/complaint-discovery
         run: npm install

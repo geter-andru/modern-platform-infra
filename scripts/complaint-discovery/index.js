@@ -1,10 +1,9 @@
 /**
  * Complaint Discovery Agent
- * Scrapes Reddit for user complaints and pain points
+ * Uses Reddit's official API to find user complaints and pain points
  * Stores in Supabase for pattern analysis
  */
 
-import { chromium } from 'playwright';
 import Anthropic from '@anthropic-ai/sdk';
 import { createClient } from '@supabase/supabase-js';
 
@@ -14,6 +13,10 @@ const anthropic = new Anthropic();
 const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_KEY;
 const SUBREDDITS = (process.env.SUBREDDITS || 'Entrepreneur,SaaS,startups,sales').split(',').map(s => s.trim());
+
+// Reddit API credentials (use app-only auth)
+const REDDIT_CLIENT_ID = process.env.REDDIT_CLIENT_ID;
+const REDDIT_CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET;
 
 if (!supabaseUrl || !supabaseKey) {
   console.error('❌ SUPABASE_URL and SUPABASE_SERVICE_KEY are required');
@@ -43,12 +46,83 @@ const SEARCH_TERMS = [
   'startup sales process'
 ];
 
+let redditAccessToken = null;
+
+/**
+ * Get Reddit access token using app-only (client credentials) flow
+ */
+async function getRedditToken() {
+  if (!REDDIT_CLIENT_ID || !REDDIT_CLIENT_SECRET) {
+    console.log('⚠️  Reddit API credentials not provided, using public JSON endpoints');
+    return null;
+  }
+
+  try {
+    const auth = Buffer.from(`${REDDIT_CLIENT_ID}:${REDDIT_CLIENT_SECRET}`).toString('base64');
+
+    const response = await fetch('https://www.reddit.com/api/v1/access_token', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${auth}`,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'User-Agent': 'ComplaintDiscovery/1.0'
+      },
+      body: 'grant_type=client_credentials'
+    });
+
+    if (!response.ok) {
+      console.log('⚠️  Reddit OAuth failed, using public endpoints');
+      return null;
+    }
+
+    const data = await response.json();
+    console.log('✅ Reddit API authenticated');
+    return data.access_token;
+  } catch (error) {
+    console.log('⚠️  Reddit auth error:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Fetch from Reddit API or public JSON endpoint
+ */
+async function redditFetch(url) {
+  const headers = {
+    'User-Agent': 'ComplaintDiscovery/1.0 (by /u/andru_platform)'
+  };
+
+  if (redditAccessToken) {
+    // Use OAuth API
+    const apiUrl = url.replace('https://www.reddit.com', 'https://oauth.reddit.com');
+    headers['Authorization'] = `Bearer ${redditAccessToken}`;
+
+    const response = await fetch(apiUrl, { headers });
+    if (response.ok) {
+      return response.json();
+    }
+  }
+
+  // Fallback to public JSON endpoint
+  const jsonUrl = url.endsWith('.json') ? url : `${url}.json`;
+  const response = await fetch(jsonUrl, { headers });
+
+  if (!response.ok) {
+    throw new Error(`Reddit API error: ${response.status}`);
+  }
+
+  return response.json();
+}
+
 /**
  * Main execution
  */
 async function main() {
   console.log('🔍 Complaint Discovery Agent Starting...\n');
   console.log(`Subreddits: ${SUBREDDITS.join(', ')}\n`);
+
+  // Get Reddit token if credentials provided
+  redditAccessToken = await getRedditToken();
 
   // Create scrape run record
   const { data: scrapeRun } = await supabase
@@ -65,7 +139,7 @@ async function main() {
   const runId = scrapeRun?.id;
 
   try {
-    // Scrape Reddit
+    // Scrape Reddit using API
     const posts = await scrapeReddit();
     console.log(`\n📋 Found ${posts.length} potential complaint posts\n`);
 
@@ -169,13 +243,11 @@ async function main() {
 }
 
 /**
- * Scrape Reddit for complaints
+ * Scrape Reddit for complaints using API
  */
 async function scrapeReddit() {
-  console.log('🔴 Scraping Reddit...');
+  console.log('🔴 Scraping Reddit via API...');
 
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
   const posts = [];
 
   try {
@@ -184,47 +256,69 @@ async function scrapeReddit() {
 
       // Search within subreddit for complaint-related posts
       for (const term of SEARCH_TERMS.slice(0, 4)) {
-        const searchUrl = `https://old.reddit.com/r/${subreddit}/search?q=${encodeURIComponent(term)}&restrict_sr=on&sort=new&t=month`;
-
         try {
-          await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
-          await page.waitForTimeout(1500);
+          const searchUrl = `https://www.reddit.com/r/${subreddit}/search.json?q=${encodeURIComponent(term)}&restrict_sr=on&sort=new&t=month&limit=15`;
 
-          const searchResults = await extractPosts(page, subreddit);
-          posts.push(...searchResults);
+          const data = await redditFetch(searchUrl);
 
+          if (data?.data?.children) {
+            for (const child of data.data.children) {
+              const post = child.data;
+              posts.push({
+                subreddit: `r/${subreddit}`,
+                postId: post.name,
+                title: post.title || '',
+                url: `https://www.reddit.com${post.permalink}`,
+                author: post.author || '[deleted]',
+                upvotes: post.ups || 0,
+                comments: post.num_comments || 0,
+                content: (post.selftext || '').slice(0, 2000)
+              });
+            }
+          }
+
+          await sleep(1000); // Rate limit between requests
         } catch (e) {
-          console.log(`    Warning: Could not search "${term}" in r/${subreddit}`);
+          console.log(`    Warning: Could not search "${term}" in r/${subreddit}: ${e.message}`);
         }
-
-        await page.waitForTimeout(1000);
       }
 
       // Also check "new" posts
       try {
-        await page.goto(`https://old.reddit.com/r/${subreddit}/new/`, {
-          waitUntil: 'domcontentloaded',
-          timeout: 20000
-        });
-        await page.waitForTimeout(1500);
+        const newUrl = `https://www.reddit.com/r/${subreddit}/new.json?limit=25`;
+        const data = await redditFetch(newUrl);
 
-        const newPosts = await extractPosts(page, subreddit);
+        if (data?.data?.children) {
+          for (const child of data.data.children) {
+            const post = child.data;
+            const text = `${post.title} ${post.selftext}`.toLowerCase();
 
-        // Filter for complaint indicators
-        const complaintPosts = newPosts.filter(post => {
-          const text = `${post.title} ${post.content}`.toLowerCase();
-          return COMPLAINT_KEYWORDS.some(kw => text.includes(kw));
-        });
+            // Filter for complaint indicators
+            const hasComplaintKeyword = COMPLAINT_KEYWORDS.some(kw => text.includes(kw));
 
-        posts.push(...complaintPosts);
+            if (hasComplaintKeyword) {
+              posts.push({
+                subreddit: `r/${subreddit}`,
+                postId: post.name,
+                title: post.title || '',
+                url: `https://www.reddit.com${post.permalink}`,
+                author: post.author || '[deleted]',
+                upvotes: post.ups || 0,
+                comments: post.num_comments || 0,
+                content: (post.selftext || '').slice(0, 2000)
+              });
+            }
+          }
+        }
 
+        await sleep(1000);
       } catch (e) {
-        console.log(`    Warning: Could not scrape new posts in r/${subreddit}`);
+        console.log(`    Warning: Could not scrape new posts in r/${subreddit}: ${e.message}`);
       }
     }
 
-  } finally {
-    await browser.close();
+  } catch (error) {
+    console.error('Error scraping Reddit:', error.message);
   }
 
   // Deduplicate by URL
@@ -235,39 +329,13 @@ async function scrapeReddit() {
 }
 
 /**
- * Extract posts from a Reddit page
- */
-async function extractPosts(page, subreddit) {
-  return page.$$eval('.thing.link:not(.promoted)', (els, sub) => {
-    return els.slice(0, 15).map(el => {
-      const titleEl = el.querySelector('a.title');
-      const authorEl = el.querySelector('.author');
-      const scoreEl = el.querySelector('.score.unvoted');
-      const commentsEl = el.querySelector('.comments');
-      const selfTextEl = el.querySelector('.expando .usertext-body');
-
-      return {
-        subreddit: sub,
-        postId: el.getAttribute('data-fullname'),
-        title: titleEl?.textContent?.trim() || '',
-        url: titleEl?.href || '',
-        author: authorEl?.textContent?.trim() || '[deleted]',
-        upvotes: parseInt(scoreEl?.textContent?.replace(/[^0-9-]/g, '') || '0'),
-        comments: parseInt(commentsEl?.textContent?.match(/(\d+)/)?.[1] || '0'),
-        content: selfTextEl?.textContent?.trim()?.slice(0, 2000) || ''
-      };
-    });
-  }, subreddit);
-}
-
-/**
  * Analyze a post with Claude
  */
 async function analyzePost(post) {
   const prompt = `Analyze this Reddit post to determine if it expresses a genuine complaint or pain point relevant to B2B SaaS founders.
 
 ## POST
-Subreddit: r/${post.subreddit}
+Subreddit: ${post.subreddit}
 Title: ${post.title}
 Content: ${post.content || '(no body text)'}
 Upvotes: ${post.upvotes}

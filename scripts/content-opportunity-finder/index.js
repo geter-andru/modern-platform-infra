@@ -1,9 +1,8 @@
 /**
  * Content Opportunity Finder
- * Scrapes Quora, Reddit, and LinkedIn for unanswered questions in your domain
+ * Uses Hacker News API to find unanswered questions and content opportunities
  */
 
-import { chromium } from 'playwright';
 import Anthropic from '@anthropic-ai/sdk';
 import fs from 'fs/promises';
 import path from 'path';
@@ -12,9 +11,8 @@ const anthropic = new Anthropic();
 
 // Configuration
 const OUTPUT_ROOT = process.env.OUTPUT_ROOT || process.cwd();
-const PLATFORMS = (process.env.PLATFORMS || 'quora,reddit,linkedin').split(',').map(p => p.trim());
 
-// Topics to search for
+// Topics to search for on Hacker News
 const SEARCH_TOPICS = [
   'first sales hire startup',
   'ICP ideal customer profile',
@@ -25,44 +23,33 @@ const SEARCH_TOPICS = [
   'enterprise sales startup',
   'sales hiring early stage',
   'GTM go to market strategy',
-  'product market fit sales'
+  'product market fit sales',
+  'customer discovery startup',
+  'finding first customers'
 ];
+
+// HN Algolia API base
+const HN_API = 'https://hn.algolia.com/api/v1';
 
 /**
  * Main execution
  */
 async function main() {
   console.log('📝 Content Opportunity Finder Starting...\n');
-  console.log(`Platforms: ${PLATFORMS.join(', ')}\n`);
+  console.log('Platform: Hacker News\n');
 
-  const allOpportunities = [];
-
-  // Scrape each platform
-  if (PLATFORMS.includes('reddit')) {
-    const redditOpps = await scrapeReddit();
-    allOpportunities.push(...redditOpps);
-  }
-
-  if (PLATFORMS.includes('quora')) {
-    const quoraOpps = await scrapeQuora();
-    allOpportunities.push(...quoraOpps);
-  }
-
-  if (PLATFORMS.includes('linkedin')) {
-    const linkedinOpps = await scrapeLinkedInQuestions();
-    allOpportunities.push(...linkedinOpps);
-  }
-
-  console.log(`\n📊 Found ${allOpportunities.length} raw opportunities\n`);
+  // Fetch opportunities from Hacker News
+  const opportunities = await scrapeHackerNews();
+  console.log(`\n📊 Found ${opportunities.length} raw opportunities\n`);
 
   // Filter and score opportunities
-  const scoredOpportunities = allOpportunities
+  const scoredOpportunities = opportunities
     .filter(opp => opp.question && opp.question.length > 20)
     .map(opp => ({
       ...opp,
       relevanceScore: scoreRelevance(opp)
     }))
-    .filter(opp => opp.relevanceScore >= 50)
+    .filter(opp => opp.relevanceScore >= 40)
     .sort((a, b) => b.relevanceScore - a.relevanceScore)
     .slice(0, 15);
 
@@ -72,225 +59,207 @@ async function main() {
   for (const opp of scoredOpportunities) {
     console.log(`  → Generating answer for: ${opp.title?.slice(0, 50)}...`);
     opp.suggestedAnswer = await generateAnswer(opp);
+    await sleep(500); // Rate limiting
   }
 
   // Save results
   await saveOpportunities(scoredOpportunities);
 
+  // Export for GitHub Action
+  const envFile = process.env.GITHUB_ENV;
+  if (envFile) {
+    const fsSync = await import('fs');
+    fsSync.appendFileSync(envFile, `OPPORTUNITIES_FOUND=${scoredOpportunities.length}\n`);
+  }
+
   // Summary
-  console.log('\n📊 Summary by Platform:');
-  const byPlatform = {};
-  for (const opp of scoredOpportunities) {
-    byPlatform[opp.platform] = (byPlatform[opp.platform] || 0) + 1;
-  }
-  for (const [platform, count] of Object.entries(byPlatform)) {
-    console.log(`  ${platform}: ${count}`);
-  }
+  console.log('\n📊 Summary:');
+  console.log(`  Total opportunities: ${scoredOpportunities.length}`);
+  console.log(`  Ask HN posts: ${scoredOpportunities.filter(o => o.type === 'ask_hn').length}`);
+  console.log(`  Comments: ${scoredOpportunities.filter(o => o.type === 'comment').length}`);
+  console.log(`  Stories: ${scoredOpportunities.filter(o => o.type === 'story').length}`);
 
   console.log('\n✨ Done!');
 }
 
 /**
- * Scrape Reddit for questions
+ * Scrape Hacker News for content opportunities using Algolia API
  */
-async function scrapeReddit() {
-  console.log('🔴 Scraping Reddit...');
+async function scrapeHackerNews() {
+  console.log('🟠 Fetching from Hacker News API...');
 
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
   const opportunities = [];
+  const oneWeekAgo = Math.floor(Date.now() / 1000) - (7 * 24 * 60 * 60);
 
-  const subreddits = ['startups', 'sales', 'SaaS', 'Entrepreneur', 'smallbusiness'];
+  // Search for relevant questions and discussions
+  for (const topic of SEARCH_TOPICS) {
+    try {
+      console.log(`  Searching: "${topic}"...`);
 
-  try {
-    for (const subreddit of subreddits) {
-      // Search within subreddit
-      for (const topic of SEARCH_TOPICS.slice(0, 3)) {
-        const searchUrl = `https://old.reddit.com/r/${subreddit}/search?q=${encodeURIComponent(topic)}&restrict_sr=on&sort=new&t=week`;
+      // Search Ask HN posts (often questions seeking advice)
+      const askUrl = `${HN_API}/search?query=${encodeURIComponent(topic)}&tags=ask_hn&numericFilters=created_at_i>${oneWeekAgo}&hitsPerPage=15`;
+      const askResponse = await fetch(askUrl);
+      const askData = await askResponse.json();
 
-        try {
-          await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-          await page.waitForTimeout(1500);
+      if (askData.hits) {
+        for (const hit of askData.hits) {
+          const title = hit.title || '';
+          const text = hit.story_text || '';
 
-          const posts = await page.$$eval('.thing.link:not(.promoted)', (els) => {
-            return els.slice(0, 5).map(el => {
-              const titleEl = el.querySelector('a.title');
-              const authorEl = el.querySelector('.author');
-              const commentsEl = el.querySelector('.comments');
-              const scoreEl = el.querySelector('.score.unvoted');
+          // Prioritize posts with questions or seeking advice
+          const isQuestion = title.includes('?') ||
+                            title.toLowerCase().includes('how') ||
+                            title.toLowerCase().includes('advice') ||
+                            title.toLowerCase().includes('help');
 
-              return {
-                title: titleEl?.textContent?.trim() || '',
-                url: titleEl?.href || '',
-                author: authorEl?.textContent?.trim() || '',
-                comments: parseInt(commentsEl?.textContent?.match(/(\d+)/)?.[1] || '0'),
-                score: parseInt(scoreEl?.textContent?.replace(/[^0-9-]/g, '') || '0')
-              };
+          // Look for posts with low comment counts (unanswered opportunities)
+          const hasOpportunity = (hit.num_comments || 0) < 15;
+
+          if (isQuestion || hasOpportunity) {
+            opportunities.push({
+              platform: 'Hacker News',
+              type: 'ask_hn',
+              title: title,
+              question: title,
+              body: stripHtml(text).slice(0, 500),
+              url: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+              author: hit.author || '[unknown]',
+              engagement: hit.num_comments || 0,
+              points: hit.points || 0,
+              createdAt: new Date(hit.created_at_i * 1000).toISOString()
             });
-          });
-
-          for (const post of posts) {
-            // Prioritize posts with questions and low comment counts (unanswered)
-            if ((post.title.includes('?') || post.title.toLowerCase().includes('how') ||
-                 post.title.toLowerCase().includes('what') || post.title.toLowerCase().includes('advice')) &&
-                post.comments < 10) {
-              opportunities.push({
-                platform: 'Reddit',
-                subreddit: `r/${subreddit}`,
-                title: post.title,
-                question: post.title,
-                url: post.url,
-                author: post.author,
-                engagement: post.comments,
-                score: post.score
-              });
-            }
           }
-        } catch (e) {
-          // Continue on error
         }
-
-        await page.waitForTimeout(1000);
       }
+
+      // Search story posts
+      const storyUrl = `${HN_API}/search?query=${encodeURIComponent(topic)}&tags=story&numericFilters=created_at_i>${oneWeekAgo}&hitsPerPage=10`;
+      const storyResponse = await fetch(storyUrl);
+      const storyData = await storyResponse.json();
+
+      if (storyData.hits) {
+        for (const hit of storyData.hits) {
+          const title = hit.title || '';
+
+          // Look for Show HN or discussions about these topics
+          const isRelevant = title.toLowerCase().includes('show hn') ||
+                            title.includes('?') ||
+                            (hit.points || 0) > 20;
+
+          if (isRelevant && (hit.num_comments || 0) < 20) {
+            opportunities.push({
+              platform: 'Hacker News',
+              type: 'story',
+              title: title,
+              question: title,
+              body: stripHtml(hit.story_text || '').slice(0, 500),
+              url: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+              author: hit.author || '[unknown]',
+              engagement: hit.num_comments || 0,
+              points: hit.points || 0,
+              createdAt: new Date(hit.created_at_i * 1000).toISOString()
+            });
+          }
+        }
+      }
+
+      // Search comments for questions/pain points
+      const commentUrl = `${HN_API}/search?query=${encodeURIComponent(topic)}&tags=comment&numericFilters=created_at_i>${oneWeekAgo}&hitsPerPage=10`;
+      const commentResponse = await fetch(commentUrl);
+      const commentData = await commentResponse.json();
+
+      if (commentData.hits) {
+        for (const hit of commentData.hits) {
+          const text = hit.comment_text || '';
+          const cleanText = stripHtml(text);
+
+          // Look for comments asking questions
+          const isQuestion = cleanText.includes('?') && cleanText.length > 50 && cleanText.length < 500;
+          const hasKeywords = ['anyone', 'advice', 'help', 'how do', 'struggling', 'trying to'].some(kw =>
+            cleanText.toLowerCase().includes(kw)
+          );
+
+          if (isQuestion && hasKeywords) {
+            opportunities.push({
+              platform: 'Hacker News',
+              type: 'comment',
+              title: `Comment on: ${hit.story_title || 'HN Discussion'}`,
+              question: cleanText.slice(0, 300),
+              body: cleanText,
+              url: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+              parentUrl: hit.story_url || `https://news.ycombinator.com/item?id=${hit.story_id}`,
+              author: hit.author || '[unknown]',
+              engagement: 0,
+              points: hit.points || 0,
+              createdAt: new Date(hit.created_at_i * 1000).toISOString()
+            });
+          }
+        }
+      }
+
+      await sleep(200); // Be nice to the API
+    } catch (e) {
+      console.log(`    Warning: Search failed for "${topic}": ${e.message}`);
     }
-  } catch (error) {
-    console.error('  Error scraping Reddit:', error.message);
-  } finally {
-    await browser.close();
   }
 
-  console.log(`  Found ${opportunities.length} Reddit opportunities`);
-  return opportunities;
+  // Also fetch recent Ask HN posts generally
+  try {
+    console.log('  Fetching recent Ask HN posts...');
+    const recentUrl = `${HN_API}/search?tags=ask_hn&numericFilters=created_at_i>${oneWeekAgo}&hitsPerPage=30`;
+    const recentResponse = await fetch(recentUrl);
+    const recentData = await recentResponse.json();
+
+    if (recentData.hits) {
+      for (const hit of recentData.hits) {
+        const title = hit.title || '';
+        const text = `${title} ${hit.story_text || ''}`.toLowerCase();
+
+        // Filter for startup/sales related Ask HNs
+        const businessKeywords = ['startup', 'saas', 'b2b', 'sales', 'customer', 'founder', 'business', 'product', 'market', 'revenue', 'gtm', 'hiring', 'first hire'];
+        const isRelevant = businessKeywords.some(kw => text.includes(kw));
+
+        if (isRelevant && (hit.num_comments || 0) < 20) {
+          opportunities.push({
+            platform: 'Hacker News',
+            type: 'ask_hn',
+            title: hit.title || '',
+            question: hit.title || '',
+            body: stripHtml(hit.story_text || '').slice(0, 500),
+            url: `https://news.ycombinator.com/item?id=${hit.objectID}`,
+            author: hit.author || '[unknown]',
+            engagement: hit.num_comments || 0,
+            points: hit.points || 0,
+            createdAt: new Date(hit.created_at_i * 1000).toISOString()
+          });
+        }
+      }
+    }
+  } catch (e) {
+    console.log(`    Warning: Recent Ask HN fetch failed: ${e.message}`);
+  }
+
+  // Deduplicate by URL
+  const unique = [...new Map(opportunities.map(o => [o.url, o])).values()];
+  console.log(`  Found ${unique.length} unique opportunities`);
+
+  return unique;
 }
 
 /**
- * Scrape Quora for questions
+ * Strip HTML tags from text
  */
-async function scrapeQuora() {
-  console.log('🟠 Scraping Quora...');
-
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  const opportunities = [];
-
-  try {
-    for (const topic of SEARCH_TOPICS.slice(0, 5)) {
-      const searchUrl = `https://www.quora.com/search?q=${encodeURIComponent(topic)}&type=question`;
-
-      try {
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 20000 });
-        await page.waitForTimeout(2000);
-
-        // Scroll to load more
-        await page.evaluate(() => window.scrollTo(0, 1000));
-        await page.waitForTimeout(1500);
-
-        const questions = await page.$$eval('[class*="q-box"]', (els) => {
-          return els.slice(0, 10).map(el => {
-            const linkEl = el.querySelector('a[href*="/"]');
-            const textEl = el.querySelector('span');
-            const answersEl = el.querySelector('[class*="answer"]');
-
-            const text = textEl?.textContent?.trim() || '';
-            const href = linkEl?.href || '';
-
-            // Only get questions (contain ?)
-            if (!text.includes('?')) return null;
-
-            return {
-              title: text,
-              url: href.startsWith('http') ? href : `https://www.quora.com${href}`,
-              answers: parseInt(answersEl?.textContent?.match(/(\d+)/)?.[1] || '0')
-            };
-          }).filter(Boolean);
-        });
-
-        for (const q of questions) {
-          if (q && q.title && q.answers < 5) {
-            opportunities.push({
-              platform: 'Quora',
-              title: q.title,
-              question: q.title,
-              url: q.url,
-              engagement: q.answers
-            });
-          }
-        }
-      } catch (e) {
-        // Continue on error
-      }
-
-      await page.waitForTimeout(1500);
-    }
-  } catch (error) {
-    console.error('  Error scraping Quora:', error.message);
-  } finally {
-    await browser.close();
-  }
-
-  console.log(`  Found ${opportunities.length} Quora opportunities`);
-  return opportunities;
-}
-
-/**
- * Scrape LinkedIn for polls and questions
- */
-async function scrapeLinkedInQuestions() {
-  console.log('🔵 Scraping LinkedIn (public search)...');
-
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-  const opportunities = [];
-
-  try {
-    // LinkedIn public search for relevant discussions
-    const searchTerms = ['startup sales advice', 'first sales hire', 'ICP help'];
-
-    for (const term of searchTerms) {
-      const searchUrl = `https://www.linkedin.com/search/results/content/?keywords=${encodeURIComponent(term)}&origin=GLOBAL_SEARCH_HEADER&sortBy=%22date_posted%22`;
-
-      try {
-        await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-        await page.waitForTimeout(2000);
-
-        // Note: LinkedIn heavily restricts scraping without login
-        // This will capture limited public content
-        const posts = await page.$$eval('.search-result', (els) => {
-          return els.slice(0, 5).map(el => {
-            const textEl = el.querySelector('.search-result__snippet');
-            const linkEl = el.querySelector('a');
-
-            return {
-              text: textEl?.textContent?.trim() || '',
-              url: linkEl?.href || ''
-            };
-          });
-        }).catch(() => []);
-
-        for (const post of posts) {
-          if (post.text && (post.text.includes('?') || post.text.toLowerCase().includes('advice'))) {
-            opportunities.push({
-              platform: 'LinkedIn',
-              title: post.text.slice(0, 100),
-              question: post.text,
-              url: post.url
-            });
-          }
-        }
-      } catch (e) {
-        // LinkedIn may block - continue
-      }
-
-      await page.waitForTimeout(2000);
-    }
-  } catch (error) {
-    console.error('  Error scraping LinkedIn:', error.message);
-  } finally {
-    await browser.close();
-  }
-
-  console.log(`  Found ${opportunities.length} LinkedIn opportunities`);
-  return opportunities;
+function stripHtml(html) {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
@@ -298,11 +267,11 @@ async function scrapeLinkedInQuestions() {
  */
 function scoreRelevance(opp) {
   let score = 0;
-  const text = `${opp.title} ${opp.question}`.toLowerCase();
+  const text = `${opp.title} ${opp.question} ${opp.body || ''}`.toLowerCase();
 
   // High-value keywords
-  const highValue = ['first sales', 'icp', 'ideal customer', 'founder', 'technical founder', 'b2b saas', 'enterprise sales', 'gtm'];
-  const mediumValue = ['startup', 'sales', 'strategy', 'process', 'hiring', 'advice'];
+  const highValue = ['first sales', 'icp', 'ideal customer', 'founder', 'technical founder', 'b2b saas', 'enterprise sales', 'gtm', 'go to market'];
+  const mediumValue = ['startup', 'sales', 'strategy', 'process', 'hiring', 'advice', 'customer', 'revenue'];
 
   for (const kw of highValue) {
     if (text.includes(kw)) score += 20;
@@ -316,14 +285,20 @@ function scoreRelevance(opp) {
   if (text.includes('?')) score += 15;
   if (text.includes('how do')) score += 10;
   if (text.includes('advice')) score += 10;
+  if (text.includes('struggling')) score += 10;
+  if (text.includes('help')) score += 5;
 
-  // Bonus for low engagement (more opportunity)
-  if ((opp.engagement || 0) < 3) score += 20;
-  if ((opp.engagement || 0) < 5) score += 10;
+  // Bonus for Ask HN posts (higher visibility)
+  if (opp.type === 'ask_hn') score += 15;
 
-  // Platform bonuses
-  if (opp.platform === 'Reddit' && opp.subreddit?.includes('startups')) score += 10;
-  if (opp.platform === 'Quora') score += 5;
+  // Bonus for low engagement (more opportunity to contribute)
+  if ((opp.engagement || 0) < 5) score += 20;
+  else if ((opp.engagement || 0) < 10) score += 10;
+
+  // Bonus for recent posts
+  const ageHours = (Date.now() - new Date(opp.createdAt).getTime()) / (1000 * 60 * 60);
+  if (ageHours < 24) score += 15;
+  else if (ageHours < 48) score += 10;
 
   return score;
 }
@@ -334,17 +309,18 @@ function scoreRelevance(opp) {
 async function generateAnswer(opp) {
   const prompt = `You are Brandon Geter, founder of Andru (Revenue Intelligence for B2B SaaS founders) with 9 years of SaaS sales experience.
 
-Generate a helpful, genuine answer to this question. The answer should:
+Generate a helpful, genuine answer to this Hacker News question. The answer should:
 1. Be genuinely helpful (not a pitch)
 2. Share specific, actionable advice from your experience
 3. Include a framework or specific steps when relevant
-4. Be appropriate for the platform (${opp.platform})
-5. NOT mention Andru or any product
+4. Match the HN community tone: direct, technical, substance-focused
+5. NOT mention Andru or any product - this is purely helpful advice
 
 ## QUESTION
-Platform: ${opp.platform}
-${opp.subreddit ? `Subreddit: ${opp.subreddit}` : ''}
-Question: ${opp.question}
+Platform: Hacker News
+Type: ${opp.type}
+Title: ${opp.title}
+${opp.body ? `Body: ${opp.body}` : ''}
 
 ## YOUR BACKGROUND
 - 9 years SaaS sales (Apttus, Sumo Logic, Graphite, OpsLevel)
@@ -352,17 +328,19 @@ Question: ${opp.question}
 - Hired/trained 20+ sellers
 - Helped technical founders translate product to business value
 
-## PLATFORM GUIDELINES
-- Reddit: Be casual, genuine, share experience. No self-promo.
-- Quora: Be comprehensive, authoritative. Can be longer.
-- LinkedIn: Professional, thought-leadership tone.
+## HN COMMUNITY GUIDELINES
+- Be direct, get to the point
+- Share real experience and data when possible
+- Avoid marketing speak or fluff
+- Technical audience appreciates specifics
+- It's okay to disagree respectfully if you have experience to back it up
 
-Generate the answer (200-400 words). No intro like "Great question!" - just dive in.`;
+Generate the answer (150-300 words). No intro like "Great question!" - just dive into substantive advice.`;
 
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 500,
+      max_tokens: 400,
       messages: [{ role: 'user', content: prompt }]
     });
 
@@ -386,17 +364,25 @@ async function saveOpportunities(opportunities) {
 
   const output = {
     date,
+    platform: 'Hacker News',
     totalOpportunities: opportunities.length,
-    byPlatform: {
-      reddit: opportunities.filter(o => o.platform === 'Reddit').length,
-      quora: opportunities.filter(o => o.platform === 'Quora').length,
-      linkedin: opportunities.filter(o => o.platform === 'LinkedIn').length
+    byType: {
+      ask_hn: opportunities.filter(o => o.type === 'ask_hn').length,
+      story: opportunities.filter(o => o.type === 'story').length,
+      comment: opportunities.filter(o => o.type === 'comment').length
     },
     opportunities
   };
 
   await fs.writeFile(filepath, JSON.stringify(output, null, 2), 'utf-8');
   console.log(`\n💾 Saved: ${filename}`);
+}
+
+/**
+ * Sleep helper
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Run

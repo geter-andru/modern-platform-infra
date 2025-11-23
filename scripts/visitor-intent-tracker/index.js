@@ -82,7 +82,7 @@ async function fetchVisitorData(startDate, endDate) {
   try {
     // Fetch page views
     const { data: pageViews, error } = await supabase
-      .from('public_page_analytics')
+      .from('public_page_visits')
       .select('*')
       .gte('created_at', startDate.toISOString())
       .lt('created_at', endDate.toISOString())

@@ -1,8 +1,88 @@
 {
   "date": "2025-11-22",
-  "totalVisitors": 0,
+  "totalVisitors": 4,
   "hot": 0,
-  "warm": 0,
-  "medium": 0,
-  "visitors": []
+  "warm": 3,
+  "medium": 1,
+  "visitors": [
+    {
+      "sessionId": "5ad3552a-b1c3-4a4a-a7d1-d95696fc294a",
+      "company": "Delve",
+      "pagesViewed": [
+        "/icp/delve"
+      ],
+      "events": [],
+      "firstVisit": "2025-11-22T00:00:45.891222+00:00",
+      "lastVisit": "2025-11-22T00:00:45.891222+00:00",
+      "totalTime": "0 minutes",
+      "utmSource": null,
+      "utmCampaign": null,
+      "intentScore": 45,
+      "intentLevel": "warm",
+      "signals": [
+        "Visited high-intent page: /icp/delve",
+        "Viewed ICP scenarios: /icp/delve"
+      ],
+      "suggestedAction": "Send a personalized email to Delve referencing their specific ICP scenario from the page they viewed, highlighting how your solution addresses the exact challenges outlined in their use case and offering a brief demo focused on those pain points."
+    },
+    {
+      "sessionId": "fc07582d-3478-4ac4-81cb-474fcb4bdd57",
+      "company": "Delve",
+      "pagesViewed": [
+        "/icp/delve"
+      ],
+      "events": [],
+      "firstVisit": "2025-11-22T00:00:46.04305+00:00",
+      "lastVisit": "2025-11-22T00:00:46.04305+00:00",
+      "totalTime": "0 minutes",
+      "utmSource": null,
+      "utmCampaign": null,
+      "intentScore": 45,
+      "intentLevel": "warm",
+      "signals": [
+        "Visited high-intent page: /icp/delve",
+        "Viewed ICP scenarios: /icp/delve"
+      ],
+      "suggestedAction": "Send a personalized email to the Delve team within 24 hours referencing their specific ICP scenario from the /icp/delve page, highlighting how your solution addresses their unique challenges, and offer a brief 15-minute call to discuss their immediate needs."
+    },
+    {
+      "sessionId": "f2f4ceb8-325d-4715-8ea5-36bca7aba663",
+      "company": "Anaflash",
+      "pagesViewed": [
+        "/icp/anaflash"
+      ],
+      "events": [],
+      "firstVisit": "2025-11-22T04:41:33.339947+00:00",
+      "lastVisit": "2025-11-22T04:41:33.339947+00:00",
+      "totalTime": "0 minutes",
+      "utmSource": null,
+      "utmCampaign": null,
+      "intentScore": 45,
+      "intentLevel": "warm",
+      "signals": [
+        "Visited high-intent page: /icp/anaflash",
+        "Viewed ICP scenarios: /icp/anaflash"
+      ],
+      "suggestedAction": "Send a personalized email to the visitor referencing Anaflash's specific scenario from the ICP page they viewed, and offer a brief consultation to discuss how your solution addresses the exact challenges highlighted in that scenario."
+    },
+    {
+      "sessionId": "a2f3664a-8364-4099-8bc6-29b2ec99d4b6",
+      "company": null,
+      "pagesViewed": [
+        "/pricing"
+      ],
+      "events": [],
+      "firstVisit": "2025-11-22T09:25:43.626117+00:00",
+      "lastVisit": "2025-11-22T09:25:43.626117+00:00",
+      "totalTime": "0 minutes",
+      "utmSource": null,
+      "utmCampaign": null,
+      "intentScore": 30,
+      "intentLevel": "medium",
+      "signals": [
+        "Visited critical page: /pricing"
+      ],
+      "suggestedAction": "Send a personalized email within 24 hours with a subject line \"Quick question about your pricing research\" and offer a brief 15-minute call to answer any specific questions about pricing plans and help them determine which option best fits their needs."
+    }
+  ]
 }
